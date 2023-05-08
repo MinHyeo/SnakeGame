@@ -1,9 +1,115 @@
 #include <iostream>
+#include <string>
 #include <malloc.h>
 #include <conio.h>
 #include <windows.h>
 #include <time.h>
 using namespace std;
+
+//더블 버퍼링
+// Rectangle 구조체
+struct stRect
+{
+	int nWidth;
+	int nHeight;
+};
+
+const char BLOCK_TYPES[][3] = {
+	" ",
+	"#",
+	"@",
+};
+
+// 콘솔 관련 설정 값을 가지고 있을 구조체
+struct stConsole
+{
+	// Console Handler
+	HANDLE hConsole;
+	// Console Rect Data
+	stRect rtConsole;
+	// Console Buffer Handler
+	HANDLE hBuffer[2];
+	// Current Console Buffer Index
+	int nCurBuffer;
+
+	stConsole()
+		: hConsole(nullptr), hBuffer{ nullptr, }, nCurBuffer(0)
+	{}
+};
+
+// 전역 변수
+stConsole console;
+
+void InitGame(bool bInitConsole = true)
+{
+	// Initialize Console Data
+	if (bInitConsole)
+	{
+		// 현재 콘솔의 핸들을 받아옵니다.
+		console.hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+		// 현재 콘솔 버퍼의 인덱스를 0으로 초기화
+		console.nCurBuffer = 0;
+
+		// 콘솔 관련 설정
+		CONSOLE_CURSOR_INFO consoleCursor{ 1, FALSE };  // 콘솔의 커서 깜빡임을 제거합니다.
+		CONSOLE_SCREEN_BUFFER_INFO consoleInfo{ 0, };
+		GetConsoleScreenBufferInfo(console.hConsole, &consoleInfo);
+		consoleInfo.dwSize.X = 40;    // 콘솔의 Width
+		consoleInfo.dwSize.Y = 80;    // 콘솔의 Height
+
+		// 콘솔의 크기를 다시 계산 (나중에 그림 그릴때 사용)
+		console.rtConsole.nWidth = consoleInfo.srWindow.Right - consoleInfo.srWindow.Left;
+		console.rtConsole.nHeight = consoleInfo.srWindow.Bottom - consoleInfo.srWindow.Top;
+
+		// 콘솔의 첫번째 화면 버퍼 생성
+		console.hBuffer[0] = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
+		SetConsoleScreenBufferSize(console.hBuffer[0], consoleInfo.dwSize);    // 화면 버퍼 크기 설정
+		SetConsoleWindowInfo(console.hBuffer[0], TRUE, &consoleInfo.srWindow); // 콘솔 설정
+		SetConsoleCursorInfo(console.hBuffer[0], &consoleCursor);              // 콘솔의 커서 설정
+
+		// 콘솔의 두번째 화면 버퍼 생성
+		console.hBuffer[1] = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
+		SetConsoleScreenBufferSize(console.hBuffer[1], consoleInfo.dwSize);
+		SetConsoleWindowInfo(console.hBuffer[1], TRUE, &consoleInfo.srWindow);
+		SetConsoleCursorInfo(console.hBuffer[1], &consoleCursor);
+	}
+}
+
+void DestroyGame()
+{
+	if (console.hBuffer[0] != nullptr)
+	{
+		CloseHandle(console.hBuffer[0]);
+	}
+
+	if (console.hBuffer[1] != nullptr)
+	{
+		CloseHandle(console.hBuffer[1]);
+	}
+}
+
+// 화면 클리어
+void ClearScreen()
+{
+	COORD pos{ 0, };
+	DWORD dwWritten = 0;
+	unsigned size = console.rtConsole.nWidth * console.rtConsole.nHeight;
+
+	// 콘솔 화면 전체를 띄어쓰기를 넣어 빈 화면처럼 만듭니다.
+	FillConsoleOutputCharacter(console.hConsole, ' ', size, pos, &dwWritten);
+	SetConsoleCursorPosition(console.hConsole, pos);
+}
+
+// 버퍼 스왑
+void BufferFlip()
+{
+	// 화면 버퍼 설정
+	SetConsoleActiveScreenBuffer(console.hBuffer[console.nCurBuffer]);
+	// 화면 버퍼 인덱스를 교체
+	console.nCurBuffer = console.nCurBuffer ? 0 : 1;
+}
+
+
 
 typedef struct ListNode {
 	int x;
@@ -37,10 +143,13 @@ void CreatMap() {
 }
 
 void PrintMap(int score, int size) {
+	COORD coord{ 0, };
+	DWORD dw = 0;
 	printf("Snake Game by MinHyeong Yu                         Score : %d, Length: %d\n", score, size);
-	for (int i = 0; i < 40; i++) {
-		for (int j = 0; j < 80; j++)
+	for (short i = 0; i < 40; i++) {
+		for (short j = 0; j < 80; j++) {
 			cout << map[i][j];
+		}
 		cout << "\n";
 	}
 }
@@ -81,7 +190,7 @@ ListType* InsertSnakeHead(ListType* snake, int x, int y) {
 	return snake;
 }
 
-ListType* InsertSnake(ListType *snake, int x, int y) {
+ListType* InsertSnake(ListType* snake, int x, int y) {
 	ListNode* tmp = new ListNode;
 	if (snake->size == 0) {
 		tmp->data = 'H';
@@ -105,7 +214,7 @@ ListType* InsertSnake(ListType *snake, int x, int y) {
 	return snake;
 }
 
-ListType* RemoveSnakeTail(ListType *snake) {
+ListType* RemoveSnakeTail(ListType* snake) {
 	map[snake->snakeTail->link->x][snake->snakeTail->link->y] = ' ';
 	snake->snakeTail->link = NULL;
 	snake->size -= 1;
@@ -115,7 +224,7 @@ ListType* RemoveSnakeTail(ListType *snake) {
 	return snake;
 }
 
-ListType* MakeFirstSnake(ListType *snake) {
+ListType* MakeFirstSnake(ListType* snake) {
 	int num = 9;
 	for (int i = 0; i < 5; i++) {
 		snake = InsertSnake(snake, 20, num);
@@ -124,7 +233,7 @@ ListType* MakeFirstSnake(ListType *snake) {
 	return snake;
 }
 
-void InputKey(ListType* snake, int *x, int *y) {
+void InputKey(ListType* snake, int* x, int* y) {
 	int input = 0;
 
 	if (_kbhit() > 0) {
@@ -155,7 +264,7 @@ void InputKey(ListType* snake, int *x, int *y) {
 	}
 }
 
-int MoveSnake(ListType* snake ,int x, int y, int score, bool *isAdd, int *addTailCount, int addTail, int *inApple, bool *isDie) {
+int MoveSnake(ListType* snake, int x, int y, int score, bool* isAdd, int* addTailCount, int addTail, int* inApple, bool* isDie) {
 	int headX = snake->snakeHead->x + x;
 	int headY = snake->snakeHead->y + y;
 	switch (map[headX][headY]) {
@@ -196,21 +305,22 @@ void DrawSnake(ListType* snake) {
 	}
 }
 
-void MakeApple(int apple, int *inApple) {
+void MakeApple(int apple, int* inApple) {
 	for (; *inApple < apple; *inApple += 1) {
 		while (1) {
 			int x = rand() % 40;
 			int y = rand() % 80;
-			if(map[x][y] != 'E' || map[x][y] != 'H' || map[x][y] != '@' || map[x][y] != '#') {
+			if (map[x][y] != 'E' || map[x][y] != 'H' || map[x][y] != '@' || map[x][y] != '#') {
 				map[x][y] = '@';
 				break;
 			}
 		}
-	}	
+	}
 }
 
 int main() {
-	restart:
+restart:
+	//InitGame();
 	ListType* snake;
 	int x = 0, y = 1;
 	bool isAdd = false;
@@ -241,10 +351,10 @@ int main() {
 		score = MoveSnake(snake, x, y, score, &isAdd, &addTailCount, addTail, &inApple, &isDie);
 		if (isDie) {
 		error:
-			char input;
-			cin >> input;
+			char input = _getch();
 			switch (input) {
 			case 'y': case 'Y':
+				system("cls");
 				goto restart;
 			case 'N': case'n':
 				return 0;
@@ -259,17 +369,21 @@ int main() {
 		}
 		DrawSnake(snake);
 		PrintMap(score, snake->size);
-		Sleep(delay);
+
+		//ClearScreen();
+		//BufferFlip();
 		system("cls");
+		Sleep(delay);
 	}
+	//DestroyGame();
 	return 0;
 }
 
 /*
-1. 게임판 : 게임판을 의미하는 테두리를 콘솔에 그리도록 합니다.  
+1. 게임판 : 게임판을 의미하는 테두리를 콘솔에 그리도록 합니다.
 //clear
 
-2. 연결 리스트를 이용한 뱀의 자료구조 구현 : 뱀은 마디마디를 해당 좌표를 갖는 구조체를 활용한 연결 리스트 자료 구조를 이용하여 구현합니다. 
+2. 연결 리스트를 이용한 뱀의 자료구조 구현 : 뱀은 마디마디를 해당 좌표를 갖는 구조체를 활용한 연결 리스트 자료 구조를 이용하여 구현합니다.
 //claer
 
 3. 뱀이 움직일 수 있도록 구현 : 뱀의 이동은 진행 방향에 대한 신규 헤드 노드의 생성과 마지막 노드의 삭제를 이용하여 구현합니다.
