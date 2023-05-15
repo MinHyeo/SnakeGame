@@ -6,18 +6,14 @@
 #include <time.h>
 using namespace std;
 
-typedef struct ListNode {
-	int x;
-	int y;
-	char data;
-	ListNode* link;
-}ListNode;
-
-typedef struct ListType {
-	int size = 0;
-	ListNode* snakeHead = NULL;
-	ListNode* snakeTail = NULL;
-}ListType;
+//키보드 커서 삭제
+void CursorView()
+{
+	CONSOLE_CURSOR_INFO cursorInfo = { 0, };
+	cursorInfo.dwSize = 1; //커서 굵기 (1 ~ 100)
+	cursorInfo.bVisible = FALSE; //커서 Visible TRUE(보임) FALSE(숨김)
+	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+}
 
 char map[40][80];
 
@@ -37,46 +33,65 @@ void CreatMap() {
 	}
 }
 
-void PrintMap(int score, int size) {
-	printf("Snake Game by MinHyeong Yu                         Score : %d, Length: %d\n", score, size);
+typedef struct ListNode {
+	int x;
+	int y;
+	ListNode* link;
+}ListNode;
+
+typedef struct ListType {
+	int size = 0;
+	ListNode* snakeHead = NULL;
+	ListNode* snakeTail = NULL;
+}ListType;
+
+void gotoxy(int x, int y) {
+	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	COORD pos;
+	pos.X = x;
+	pos.Y = y;
+	SetConsoleCursorPosition(consoleHandle, pos);
+}
+
+void PrintMap() {
+	gotoxy(0, 0);
+	printf("Snake Game by MinHyeong Yu                         Score : 0, Length: 0\n");
 	for (short i = 0; i < 40; i++) {
 		for (short j = 0; j < 80; j++) {
-			cout << map[i][j];
+			if (i == 0 || i == 39) {
+				gotoxy(j, i + 1);
+				printf("#");
+			}
+			else if (j == 0) {
+				gotoxy(0, i + 1);
+				printf("#");
+				gotoxy(79, i + 1);
+				printf("#");
+				break;
+			}
 		}
-		cout << "\n";
 	}
 }
 
 void GameOver(int score) {
-	for (int i = 0; i < 40; i++) {
-		for (int j = 0; j < 80; j++) {
-			if (i == 17) {
-				cout << "#                             게임이 종료되었습니다.                           #";
-				break;
-			}
-			else if (i == 19) {
-				cout << "#                                  최종 점수 : " << score << "                               #";
-				break;
-			}
-			else if (i == 21) {
-				cout << "#                         다시 한 번 하시겠습니까(Y / N) ?                     #";
-				break;
-			}
-			else {
-				cout << map[i][j];
-			}
-		}
-		cout << "\n";
-	}
+	gotoxy(30, 18);
+	printf("게임이 종료되었습니다.");
+	gotoxy(33, 20);
+	printf("최종 점수 : %d", score);
+	gotoxy(25, 22);
+	printf("다시 한 번 하시겠습니까(Y / N) ?");
 }
 
 ListType* InsertSnakeHead(ListType* snake, int x, int y) {
 	ListNode* newHead = new ListNode;
-	newHead->data = 'H';
 	newHead->x = x;
 	newHead->y = y;
+	map[x][y] = '1';
+	gotoxy(y, x+1);
+	printf("H");
 	newHead->link = snake->snakeHead;
-	snake->snakeHead->data = 'S';
+	gotoxy(snake->snakeHead->y, snake->snakeHead->x+1);
+	printf("S");
 	snake->snakeHead = newHead;
 	snake->size += 1;
 	return snake;
@@ -85,15 +100,19 @@ ListType* InsertSnakeHead(ListType* snake, int x, int y) {
 ListType* InsertSnake(ListType* snake, int x, int y) {
 	ListNode* tmp = new ListNode;
 	if (snake->size == 0) {
-		tmp->data = 'H';
 		snake->snakeHead = tmp;
 		snake->snakeTail = tmp;
 		snake->snakeHead->x = x; snake->snakeTail->y = y;
+		map[x][y] = '1';
+		gotoxy(y, x + 1);
+		printf("H");
 		snake->size++;
 	}
 	else {
-		tmp->data = 'S';
 		tmp->x = x; tmp->y = y;
+		map[x][y] = '1';
+		gotoxy(y, x+1);
+		printf("S");
 		if (snake->size == 1) {
 			snake->snakeTail->link = tmp;
 		}
@@ -108,6 +127,8 @@ ListType* InsertSnake(ListType* snake, int x, int y) {
 
 ListType* RemoveSnakeTail(ListType* snake) {
 	map[snake->snakeTail->link->x][snake->snakeTail->link->y] = ' ';
+	gotoxy(snake->snakeTail->link->y, snake->snakeTail->link->x+1);
+	printf(" ");
 	snake->snakeTail->link = NULL;
 	snake->size -= 1;
 	snake->snakeTail = snake->snakeHead;
@@ -121,7 +142,40 @@ ListType* MakeFirstSnake(ListType* snake) {
 	for (int i = 0; i < 5; i++) {
 		snake = InsertSnake(snake, 20, num - i);
 	}
+	gotoxy(70, 0);
+	printf("%d ", snake->size);
 	return snake;
+}
+
+int MoveSnake(ListType* snake, int x, int y, int score, bool* isAdd, int* addTailCount, int addTail, int* inApple, bool* isDie) {
+	int headX = snake->snakeHead->x + x;
+	int headY = snake->snakeHead->y + y;
+	switch (map[headX][headY]) {
+	case '@':
+		score += 10;
+		gotoxy(59, 0);
+		printf("%d ", score);
+		gotoxy(70, 0);
+		printf("%d ", snake->size + addTail);
+		*isAdd = true;
+		*addTailCount += addTail;
+		*inApple -= 1;
+		break;
+	case '#': case '1':
+		*isDie = true;
+		break;
+	}
+
+	snake = InsertSnakeHead(snake, headX, headY);
+	if (!*isAdd) {
+		snake = RemoveSnakeTail(snake);
+	}
+	else {
+		*addTailCount -= 1;
+		if (*addTailCount <= 0)
+			*isAdd = false;
+	}
+	return score;
 }
 
 void InputKey(ListType* snake, int* x, int* y) {
@@ -155,43 +209,6 @@ void InputKey(ListType* snake, int* x, int* y) {
 	}
 }
 
-int MoveSnake(ListType* snake, int x, int y, int score, bool* isAdd, int* addTailCount, int addTail, int* inApple, bool* isDie) {
-	int headX = snake->snakeHead->x + x;
-	int headY = snake->snakeHead->y + y;
-	switch (map[headX][headY]) {
-	case '@':
-		score += 10;
-		*isAdd = true;
-		*addTailCount += addTail;
-		*inApple -= 1;
-		break;
-	case '#': case 'S':
-		GameOver(score);
-		*isDie = true;
-		break;
-	}
-
-	snake = InsertSnakeHead(snake, headX, headY);
-	if (!*isAdd) {
-		snake = RemoveSnakeTail(snake);
-	}
-	else {
-		*addTailCount -= 1;
-		if (*addTailCount <= 0)
-			*isAdd = false;
-	}
-	return score;
-}
-
-void DrawSnake(ListType* snake) {
-	int size = snake->size;
-	ListNode* tmp = snake->snakeHead;
-	for (int i = 0; i < size; i++) {
-		map[tmp->x][tmp->y] = tmp->data;
-		tmp = tmp->link;
-	}
-}
-
 void MakeApple(int apple, int* inApple) {
 	for (; *inApple < apple; *inApple += 1) {
 		while (1) {
@@ -199,6 +216,8 @@ void MakeApple(int apple, int* inApple) {
 			int y = rand() % 80;
 			if (map[x][y] != 'E' || map[x][y] != 'H' || map[x][y] != '@' || map[x][y] != '#') {
 				map[x][y] = '@';
+				gotoxy(y, x + 1);
+				printf("@");
 				break;
 			}
 		}
@@ -207,8 +226,9 @@ void MakeApple(int apple, int* inApple) {
 
 int main() {
 restart:
+	CursorView(); //키보드 커서 삭제
+	//필수 변수
 	ListType* snake;
-	CreatMap();
 	int x = 0, y = 1;
 	bool isAdd = false;
 	bool isDie = false;
@@ -216,9 +236,8 @@ restart:
 	int addTailCount = 0;
 	int score = 0;
 	int inApple = 0;
-	snake = new ListType;
-	snake = MakeFirstSnake(snake);
 
+	//조건 기입
 	int delay;
 	cout << "게임 지연 속도(ms) :";
 	cin >> delay;
@@ -231,12 +250,21 @@ restart:
 	cout << "과일을 먹을 때마다 늘어날 뱀의 길이 :";
 	cin >> addTail;
 
-	while (true) {
+	//게임 플레이에 필요한 요소 빌드
+	system("cls");
+	CreatMap();
+	PrintMap();
+	snake = new ListType;
+	snake = MakeFirstSnake(snake);
+
+	while (1) {
 		MakeApple(apple, &inApple);
 		InputKey(snake, &x, &y);
 		score = MoveSnake(snake, x, y, score, &isAdd, &addTailCount, addTail, &inApple, &isDie);
+		
 		if (isDie) {
 		error:
+			GameOver(score);
 			char input = _getch();
 			switch (input) {
 			case 'y': case 'Y':
@@ -250,46 +278,6 @@ restart:
 			}
 		}
 
-		DrawSnake(snake);
-		PrintMap(score, snake->size);
-
-		system("cls");
 		Sleep(delay);
 	}
-	return 0;
 }
-
-/*
-1. 게임판 : 게임판을 의미하는 테두리를 콘솔에 그리도록 합니다.
-//clear
-
-2. 연결 리스트를 이용한 뱀의 자료구조 구현 : 뱀은 마디마디를 해당 좌표를 갖는 구조체를 활용한 연결 리스트 자료 구조를 이용하여 구현합니다.
-//claer
-
-3. 뱀이 움직일 수 있도록 구현 : 뱀의 이동은 진행 방향에 대한 신규 헤드 노드의 생성과 마지막 노드의 삭제를 이용하여 구현합니다.
-(어느 한쪽 방향으로라도 움직여야 합니다.)(너무 빨리 움직이지 않도록 Sleep 함수를 이용하여 시간 딜레이를 주도록 합니다.)
-//clear
-
-< 추가 구현 사항 >
-4. 방향키를 이용하여 뱀의 진행 방향을 바꿀 수 있도록 합니다.
-//clear
-
-5. 과일을 게임판 내 임의 위치에 만들고 이를 뱀이 먹을 경우 길이가 일정값 만큼 늘어나도록 합니다.
-뱀의 길이를 늘리는 것은 과일을 먹었을 때 헤드 노드는 생성하되 마지막 노드는 일정값 만큼 삭제하지 않는 방식으로 구현합니다.
-(늘어날 수 있는 최대 길이는 미리 설정하도록 합니다.)
-//claer
-
-6. 과일을 먹고나면 새로운 과일을 다시 하나 임의 위치에 촐력하도록 합니다.
-
-7. 뱀이 벽에 부딪히면 게임을 종료하도록 합니다.
-//claer
-
-8. 뱀의 머리가 자기 몸체에 부딪히면 게임을 종료하도록 합니다.
-//clear
-
-9. 게임 종료시 다시 수행할 수 있도록 선택 사항을 줍니다.
-
-10. 게임을 계속 반복할 경우 하이스코어(최고점수)를 관리하여, 게임을 완전히 종료하는 마지막에 보여 줄 수 있도록 합니다.
-
-11. 기타 독자적인 개선 사항을 추가로 구현할 경우 추가 점수에 반영합니다.(예, 장애물 설치, 스테이지별로 다른 게임판을 제작하여 한 스테이지를 클리어 하면 다음 스테이지로 넘어가게 하는 등등)
-*/
