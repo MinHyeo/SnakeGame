@@ -6,111 +6,6 @@
 #include <time.h>
 using namespace std;
 
-//더블 버퍼링
-// Rectangle 구조체
-struct stRect
-{
-	int nWidth;
-	int nHeight;
-};
-
-const char BLOCK_TYPES[][3] = {
-	" ",
-	"#",
-	"@",
-};
-
-// 콘솔 관련 설정 값을 가지고 있을 구조체
-struct stConsole
-{
-	// Console Handler
-	HANDLE hConsole;
-	// Console Rect Data
-	stRect rtConsole;
-	// Console Buffer Handler
-	HANDLE hBuffer[2];
-	// Current Console Buffer Index
-	int nCurBuffer;
-
-	stConsole()
-		: hConsole(nullptr), hBuffer{ nullptr, }, nCurBuffer(0)
-	{}
-};
-
-// 전역 변수
-stConsole console;
-
-void InitGame(bool bInitConsole = true)
-{
-	// Initialize Console Data
-	if (bInitConsole)
-	{
-		// 현재 콘솔의 핸들을 받아옵니다.
-		console.hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-		// 현재 콘솔 버퍼의 인덱스를 0으로 초기화
-		console.nCurBuffer = 0;
-
-		// 콘솔 관련 설정
-		CONSOLE_CURSOR_INFO consoleCursor{ 1, FALSE };  // 콘솔의 커서 깜빡임을 제거합니다.
-		CONSOLE_SCREEN_BUFFER_INFO consoleInfo{ 0, };
-		GetConsoleScreenBufferInfo(console.hConsole, &consoleInfo);
-		consoleInfo.dwSize.X = 40;    // 콘솔의 Width
-		consoleInfo.dwSize.Y = 80;    // 콘솔의 Height
-
-		// 콘솔의 크기를 다시 계산 (나중에 그림 그릴때 사용)
-		console.rtConsole.nWidth = consoleInfo.srWindow.Right - consoleInfo.srWindow.Left;
-		console.rtConsole.nHeight = consoleInfo.srWindow.Bottom - consoleInfo.srWindow.Top;
-
-		// 콘솔의 첫번째 화면 버퍼 생성
-		console.hBuffer[0] = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
-		SetConsoleScreenBufferSize(console.hBuffer[0], consoleInfo.dwSize);    // 화면 버퍼 크기 설정
-		SetConsoleWindowInfo(console.hBuffer[0], TRUE, &consoleInfo.srWindow); // 콘솔 설정
-		SetConsoleCursorInfo(console.hBuffer[0], &consoleCursor);              // 콘솔의 커서 설정
-
-		// 콘솔의 두번째 화면 버퍼 생성
-		console.hBuffer[1] = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
-		SetConsoleScreenBufferSize(console.hBuffer[1], consoleInfo.dwSize);
-		SetConsoleWindowInfo(console.hBuffer[1], TRUE, &consoleInfo.srWindow);
-		SetConsoleCursorInfo(console.hBuffer[1], &consoleCursor);
-	}
-}
-
-void DestroyGame()
-{
-	if (console.hBuffer[0] != nullptr)
-	{
-		CloseHandle(console.hBuffer[0]);
-	}
-
-	if (console.hBuffer[1] != nullptr)
-	{
-		CloseHandle(console.hBuffer[1]);
-	}
-}
-
-// 화면 클리어
-void ClearScreen()
-{
-	COORD pos{ 0, };
-	DWORD dwWritten = 0;
-	unsigned size = console.rtConsole.nWidth * console.rtConsole.nHeight;
-
-	// 콘솔 화면 전체를 띄어쓰기를 넣어 빈 화면처럼 만듭니다.
-	FillConsoleOutputCharacter(console.hConsole, ' ', size, pos, &dwWritten);
-	SetConsoleCursorPosition(console.hConsole, pos);
-}
-
-// 버퍼 스왑
-void BufferFlip()
-{
-	// 화면 버퍼 설정
-	SetConsoleActiveScreenBuffer(console.hBuffer[console.nCurBuffer]);
-	// 화면 버퍼 인덱스를 교체
-	console.nCurBuffer = console.nCurBuffer ? 0 : 1;
-}
-
-
-
 typedef struct ListNode {
 	int x;
 	int y;
@@ -120,8 +15,8 @@ typedef struct ListNode {
 
 typedef struct ListType {
 	int size = 0;
-	ListNode* snakeHead;
-	ListNode* snakeTail;
+	ListNode* snakeHead = NULL;
+	ListNode* snakeTail = NULL;
 }ListType;
 
 char map[40][80];
@@ -143,8 +38,6 @@ void CreatMap() {
 }
 
 void PrintMap(int score, int size) {
-	COORD coord{ 0, };
-	DWORD dw = 0;
 	printf("Snake Game by MinHyeong Yu                         Score : %d, Length: %d\n", score, size);
 	for (short i = 0; i < 40; i++) {
 		for (short j = 0; j < 80; j++) {
@@ -154,12 +47,7 @@ void PrintMap(int score, int size) {
 	}
 }
 
-void GameOver() {
-	char a[] = "게임이 종료되었습니다."; //13
-	char b[] = "다시 한 번 하시겠습니까?(Y/N)?"; //20
-	//17 19
-	//30 28
-
+void GameOver(int score) {
 	for (int i = 0; i < 40; i++) {
 		for (int j = 0; j < 80; j++) {
 			if (i == 17) {
@@ -167,6 +55,10 @@ void GameOver() {
 				break;
 			}
 			else if (i == 19) {
+				cout << "#                                  최종 점수 : " << score << "                               #";
+				break;
+			}
+			else if (i == 21) {
 				cout << "#                         다시 한 번 하시겠습니까(Y / N) ?                     #";
 				break;
 			}
@@ -227,8 +119,7 @@ ListType* RemoveSnakeTail(ListType* snake) {
 ListType* MakeFirstSnake(ListType* snake) {
 	int num = 9;
 	for (int i = 0; i < 5; i++) {
-		snake = InsertSnake(snake, 20, num);
-		num--;
+		snake = InsertSnake(snake, 20, num - i);
 	}
 	return snake;
 }
@@ -275,25 +166,21 @@ int MoveSnake(ListType* snake, int x, int y, int score, bool* isAdd, int* addTai
 		*inApple -= 1;
 		break;
 	case '#': case 'S':
-		GameOver();
+		GameOver(score);
 		*isDie = true;
 		break;
-	default:
-		snake = InsertSnakeHead(snake, headX, headY);
-		snake = RemoveSnakeTail(snake);
-		break;
 	}
-	return score;
-}
 
-void delaySnakeAdd(int* addTailCount, bool* isAdd, ListType* snake, int x, int y) {
-	if (*addTailCount > 0) {
-		snake = InsertSnakeHead(snake, snake->snakeHead->x + x, snake->snakeHead->y + y);
-		*addTailCount -= 1;
+	snake = InsertSnakeHead(snake, headX, headY);
+	if (!*isAdd) {
+		snake = RemoveSnakeTail(snake);
 	}
 	else {
-		*isAdd = false;
+		*addTailCount -= 1;
+		if (*addTailCount <= 0)
+			*isAdd = false;
 	}
+	return score;
 }
 
 void DrawSnake(ListType* snake) {
@@ -320,8 +207,8 @@ void MakeApple(int apple, int* inApple) {
 
 int main() {
 restart:
-	//InitGame();
 	ListType* snake;
+	CreatMap();
 	int x = 0, y = 1;
 	bool isAdd = false;
 	bool isDie = false;
@@ -331,7 +218,6 @@ restart:
 	int inApple = 0;
 	snake = new ListType;
 	snake = MakeFirstSnake(snake);
-	CreatMap();
 
 	int delay;
 	cout << "게임 지연 속도(ms) :";
@@ -364,18 +250,12 @@ restart:
 			}
 		}
 
-		if (isAdd) {
-			delaySnakeAdd(&addTailCount, &isAdd, snake, x, y);
-		}
 		DrawSnake(snake);
 		PrintMap(score, snake->size);
 
-		//ClearScreen();
-		//BufferFlip();
 		system("cls");
 		Sleep(delay);
 	}
-	//DestroyGame();
 	return 0;
 }
 
